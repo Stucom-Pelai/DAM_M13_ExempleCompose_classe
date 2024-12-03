@@ -10,16 +10,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,7 +28,30 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.ViewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.ui.theme.MyApplicationTheme
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+
+data class InfoUiState(val textInput:String="", )
+class AppViewModel:ViewModel(){
+    private val _uiState = MutableStateFlow(InfoUiState())
+    val uiState: StateFlow<InfoUiState> get()=_uiState.asStateFlow()
+    init {
+        _uiState.value=InfoUiState("text escrit")
+    }
+    fun updateTextInput(textInput:String){
+        _uiState.update { it.copy(textInput = textInput) }
+    }
+    fun getTextInput():String{
+        return _uiState.value.textInput
+    }
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,9 +70,11 @@ fun PreviewApp(){
 }
 @Composable
 fun App(){
+    val viewModel:AppViewModel=AppViewModel()
     var whatShow  by remember {
         mutableStateOf<String>("greeting")
     }
+    val navController = rememberNavController()
     Column(modifier = Modifier.fillMaxWidth(1f)) {
         Row(modifier=Modifier.fillMaxWidth(1f)) {
 //            Button(onClick = {
@@ -60,27 +83,45 @@ fun App(){
 //                Text(text = "SHOW GREETING")
 //            }
             Button(onClick = {
-                whatShow="botones"
-            }){
-                Text(text = "SHOW BOTONES")
+                navController.navigate("botones")
+//                whatShow="botones"
+            }){  Text(text = "SHOW BOTONES")            }
+            Button(onClick = {navController.navigate("greeting")}){
+                Text(text="GREETING")
             }
         }
-        if(whatShow=="greeting"){
+        NavHost(navController = navController, startDestination = "botones" ){
+            composable(route="botones") {
+                            Botones(viewModel,modifier=Modifier.fillMaxWidth(1f)) {
+                whatShow = "greeting"
+            }
+            }
+            composable(route="greeting") {
+                Greeting(
+                    name = "Android", modifier = Modifier.fillMaxWidth(1f)
+                    , viewModel
+                )
+            }
+        }
+//        if(whatShow=="greeting"){
             Greeting(
                 name = "Android", modifier = Modifier.fillMaxWidth(1f)
+                , viewModel
             )
-        }else{
-            Botones(modifier=Modifier.fillMaxWidth(1f), {
-                whatShow="greeting"
-            })
-        }
+//        }else{
+//            Botones(viewModel,modifier=Modifier.fillMaxWidth(1f)) {
+//                whatShow = "greeting"
+//            }
+//        }
     }
 }
 @Composable
-fun Botones(modifier: Modifier=Modifier, funPadre:()->Unit){
+fun Botones(viewModel: AppViewModel, modifier: Modifier = Modifier, funPadre: () -> Unit){
+    val viewModel:AppViewModel=viewModel
 
     Column(modifier=modifier) {
         var mostraImatges by remember { mutableStateOf<Boolean>(false)}
+        Text(text = viewModel.getTextInput())
         Button(onClick = {
             mostraImatges=!mostraImatges
             Log.d("exemple","mostraImatges $mostraImatges")
@@ -122,16 +163,20 @@ fun ImatgeColumna(){
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    var textInput by remember {
-        mutableStateOf<String>("")
-    }
+fun Greeting(name: String, modifier: Modifier = Modifier, viewModel: AppViewModel) {
+//    var textInput by remember {
+//        mutableStateOf<String>("")
+//    }
+    val viewModel:AppViewModel=viewModel
+    var textInput= viewModel.uiState.collectAsState().value.textInput
     Column(modifier=modifier) {
-        TextField(value = textInput, onValueChange = {
-            textInput=it
+        TextField(value = viewModel.uiState.collectAsState().value.textInput,
+            onValueChange = {
+           // textInput=it
+            viewModel.updateTextInput(it)
         })
         Text(
-            text = "Hello $name!",
+            text = "Hello $name! $textInput",
             modifier = Modifier
                 .fillMaxHeight(0.5f)
                 .background(color = Color.Yellow)
@@ -148,7 +193,8 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
+    val viewModel:AppViewModel=AppViewModel()
     MyApplicationTheme {
-        Greeting("Android")
+        Greeting("Android", viewModel = viewModel)
     }
 }
