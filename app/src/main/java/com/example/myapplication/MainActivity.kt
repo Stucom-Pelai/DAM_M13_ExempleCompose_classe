@@ -29,6 +29,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -37,6 +38,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.GET
 
 data class InfoUiState(val textInput:String="", )
 class AppViewModel:ViewModel(){
@@ -71,6 +76,7 @@ fun PreviewApp(){
 @Composable
 fun App(){
     val viewModel:AppViewModel=AppViewModel()
+     val remoteViewModel:RemoteViewModel = RemoteViewModel()
     var whatShow  by remember {
         mutableStateOf<String>("greeting")
     }
@@ -92,7 +98,7 @@ fun App(){
         }
         NavHost(navController = navController, startDestination = "botones" ){
             composable(route="botones") {
-                            Botones(viewModel,modifier=Modifier.fillMaxWidth(1f)) {
+                            Botones(viewModel,modifier=Modifier.fillMaxWidth(1f), remoteViewModel = remoteViewModel) {
                 whatShow = "greeting"
             }
             }
@@ -116,8 +122,9 @@ fun App(){
     }
 }
 @Composable
-fun Botones(viewModel: AppViewModel, modifier: Modifier = Modifier, funPadre: () -> Unit){
+fun Botones(viewModel: AppViewModel, remoteViewModel: RemoteViewModel, modifier: Modifier = Modifier, funPadre: () -> Unit){
     val viewModel:AppViewModel=viewModel
+    val remoteViewModel:RemoteViewModel = remoteViewModel
 
     Column(modifier=modifier) {
         var mostraImatges by remember { mutableStateOf<Boolean>(false)}
@@ -134,6 +141,17 @@ fun Botones(viewModel: AppViewModel, modifier: Modifier = Modifier, funPadre: ()
             funPadre()
         }) {
             Text(text = "SHOW GREETING")
+        }
+        Button(onClick = {
+            remoteViewModel.getRemoteNurse()
+        }){Text(text="SEND GET")}
+        val remoteMessageUiState = remoteViewModel.remoteMessageUiState
+        when(remoteMessageUiState){
+            is RemoteMessageUiState.Error-> Text("error ")
+            is RemoteMessageUiState.Cargant-> Text(" fent la petició")
+            is RemoteMessageUiState.Success->{
+                Text(text = remoteMessageUiState.remoteMessage.nom)
+            }
         }
 
 //        if(mostraImatges) {
@@ -152,8 +170,40 @@ fun Botones(viewModel: AppViewModel, modifier: Modifier = Modifier, funPadre: ()
         }
     }
     }
-
 }
+data class Nurse(val nom:String="", val edat:Number)
+sealed interface RemoteMessageUiState{
+    data class Success(val remoteMessage:Nurse):RemoteMessageUiState
+    object Error: RemoteMessageUiState
+    object Cargant: RemoteMessageUiState
+}
+interface RemoteNurseInterface{
+    @GET("nurse")
+    suspend fun getRemoteNurse():Nurse
+}
+class RemoteViewModel:ViewModel(){
+    var remoteMessageUiState:RemoteMessageUiState by mutableStateOf(RemoteMessageUiState.Cargant)
+    private set
+    fun getRemoteNurse(){
+        viewModelScope.launch {
+            remoteMessageUiState=RemoteMessageUiState.Cargant
+            try {
+                val connexio=Retrofit.Builder().baseUrl("http://10.0.2.2:8080")
+                    .addConverterFactory(GsonConverterFactory.create()).build()
+                val endPoints = connexio.create(RemoteNurseInterface::class.java)
+                val infoNurse= endPoints.getRemoteNurse()
+                Log.d("exemple","RESPOSTA ${infoNurse.nom} ${infoNurse.edat}")
+                remoteMessageUiState = RemoteMessageUiState.Success(infoNurse)
+            }catch (e:Exception){
+                Log.d("exemple","ERROR GET ${e.message} ${e.printStackTrace()}")
+                remoteMessageUiState=RemoteMessageUiState.Error
+            }
+
+        }
+    }
+}
+
+
 @Composable
 fun ImatgeColumna(){
     Image(
